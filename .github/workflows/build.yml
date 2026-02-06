@@ -4,7 +4,7 @@ on: [push, pull_request, workflow_dispatch]
 
 jobs:
   build:
-    runs-on: windows-2019 # Windows 2019 hat bessere Unterstützung für ältere Frameworks
+    runs-on: windows-2019
 
     steps:
     - name: Checkout Code
@@ -16,15 +16,20 @@ jobs:
     - name: Setup NuGet
       uses: NuGet/setup-nuget@v1
 
-    # Dieser Schritt erzwingt .NET 4.8 für alle C# Projekte, damit der Build läuft
-    - name: Retarget to .NET 4.8
+    - name: Patch Projects (Framework & SDK)
       run: |
-        $projects = Get-ChildItem -Recurse -Filter *.csproj
+        $projects = Get-ChildItem -Recurse -Include *.csproj, *.vcxproj
         foreach ($proj in $projects) {
-          $content = Get-Content $proj.FullName
-          $content = $content -replace '<TargetFrameworkVersion>v4\.0</TargetFrameworkVersion>', '<TargetFrameworkVersion>v4.8</TargetFrameworkVersion>'
+          $content = Get-Content $proj.FullName -Raw
+          
+          # Entferne das Client Profile und erzwinge 4.8
+          $content = $content -replace '<TargetFrameworkVersion>v4\.0.*</TargetFrameworkVersion>', '<TargetFrameworkVersion>v4.8</TargetFrameworkVersion>'
           $content = $content -replace '<TargetFrameworkVersion>v4\.6\.1</TargetFrameworkVersion>', '<TargetFrameworkVersion>v4.8</TargetFrameworkVersion>'
-          Set-Content $proj.FullName $content
+          
+          # Zwinge C++ Projekt das installierte SDK zu nutzen (entfernt die harte Version)
+          $content = $content -replace '<WindowsTargetPlatformVersion>10\.0\.15063\.0</WindowsTargetPlatformVersion>', '<WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>'
+          
+          Set-Content $proj.FullName $content -NoNewline
         }
       shell: powershell
 
@@ -32,4 +37,13 @@ jobs:
       run: nuget restore wfSpy.sln
 
     - name: Build Solution
-      run: msbuild wfSpy.sln /p:Configuration=Release /p:Platform="x86"
+      # Wir fügen /p:WindowsTargetPlatformVersion=10.0 hinzu, um sicherzugehen
+      run: msbuild wfSpy.sln /p:Configuration=Release /p:Platform="x86" /p:WindowsTargetPlatformVersion="10.0"
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: wfSpy-Full-Build
+        path: |
+          **/bin/x86/Release/
+          **/bin/Release/
