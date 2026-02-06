@@ -18,19 +18,22 @@ jobs:
 
     - name: Patch Projects (Framework & SDK)
       run: |
+        # Finde die installierte SDK Version auf dem Runner
+        $sdk = (Get-ChildItem "HKLM:\SOFTWARE\Microsoft\Microsoft SDKs\Windows\v10.0" -ErrorAction SilentlyContinue | Get-ItemProperty).ProductVersion
+        if (!$sdk) { $sdk = "10.0.17763.0" } # Fallback
+        echo "Using Windows SDK: $sdk"
+
         $projects = Get-ChildItem -Recurse -Include *.csproj, *.vcxproj
         foreach ($proj in $projects) {
           $content = Get-Content $proj.FullName -Raw
           
-          # Ersetze v4.0 durch v4.8
-          $content = $content -replace '<TargetFrameworkVersion>v4\.0</TargetFrameworkVersion>', '<TargetFrameworkVersion>v4.8</TargetFrameworkVersion>'
+          # Framework Fixes
+          $content = $content -replace '<TargetFrameworkVersion>v4\.0.*</TargetFrameworkVersion>', '<TargetFrameworkVersion>v4.8</TargetFrameworkVersion>'
           $content = $content -replace '<TargetFrameworkVersion>v4\.6\.1</TargetFrameworkVersion>', '<TargetFrameworkVersion>v4.8</TargetFrameworkVersion>'
-          
-          # LÖSCHE das Client-Profil Tag komplett (wichtig!)
           $content = $content -replace '<TargetFrameworkProfile>Client</TargetFrameworkProfile>', ''
           
-          # SDK Version für C++ korrigieren
-          $content = $content -replace '<WindowsTargetPlatformVersion>10\.0\.15063\.0</WindowsTargetPlatformVersion>', '<WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>'
+          # C++ SDK Fix: Setze die exakte Version vom Host-System ein
+          $content = $content -replace '<WindowsTargetPlatformVersion>.*</WindowsTargetPlatformVersion>', "<WindowsTargetPlatformVersion>$sdk</WindowsTargetPlatformVersion>"
           
           Set-Content $proj.FullName $content -NoNewline
         }
