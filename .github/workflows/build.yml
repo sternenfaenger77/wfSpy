@@ -4,7 +4,7 @@ on: [push, pull_request, workflow_dispatch]
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: windows-2019 # Windows 2019 hat bessere Unterstützung für ältere Frameworks
 
     steps:
     - name: Checkout Code
@@ -15,6 +15,18 @@ jobs:
 
     - name: Setup NuGet
       uses: NuGet/setup-nuget@v1
+
+    # Dieser Schritt erzwingt .NET 4.8 für alle C# Projekte, damit der Build läuft
+    - name: Retarget to .NET 4.8
+      run: |
+        $projects = Get-ChildItem -Recurse -Filter *.csproj
+        foreach ($proj in $projects) {
+          $content = Get-Content $proj.FullName
+          $content = $content -replace '<TargetFrameworkVersion>v4\.0</TargetFrameworkVersion>', '<TargetFrameworkVersion>v4.8</TargetFrameworkVersion>'
+          $content = $content -replace '<TargetFrameworkVersion>v4\.6\.1</TargetFrameworkVersion>', '<TargetFrameworkVersion>v4.8</TargetFrameworkVersion>'
+          Set-Content $proj.FullName $content
+        }
+      shell: powershell
 
     - name: Restore NuGet Packages
       run: nuget restore wfSpy.sln
